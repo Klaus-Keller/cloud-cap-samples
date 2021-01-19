@@ -1,6 +1,6 @@
+const { GET, expect } = require('../test') .run ('serve','hello/world.cds')
 
 describe('Hello world!', () => {
-  const { GET, expect } = require('./capire').launch('cds serve', __dirname+'/../hello/world.cds', '')
 
   it('should say hello with class impl', async () => {
     const {data} = await GET `/say/hello(to='world')`

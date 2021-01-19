@@ -1,30 +1,26 @@
-const { expect } = require('./capire')
-const cds = require('@sap/cds')
+const { expect } = require('../test') .run (
+  'serve', 'AdminService', '--from', '@capire/bookshop,@capire/common', '--in-memory'
+)
+const cds = require('@sap/cds/lib')
 
 describe('Consuming Services locally', () => {
   //
-  before('bootstrap db and services', async () => {
-    const model = await cds.load(['@capire/bookshop', '@capire/common'])
-    await cds.deploy(model).to('sqlite::memory:')
-    const { AdminService } = await cds.serve('AdminService').from(model)
+  it('bootrapped the database successfully', ()=>{
+    const { AdminService } = cds.services
     const { Authors } = AdminService.entities
     expect(AdminService).not.to.be.undefined
     expect(Authors).not.to.be.undefined
   })
 
-  it('bootrapped the database successfully', ()=>{})
-
   it('supports targets as strings or reflected defs', async () => {
     const AdminService = await cds.connect.to('AdminService')
     const { Authors } = AdminService.entities
-    expect(await AdminService.read(Authors))
-      .to.eql(await AdminService.read('Authors'))
-      .to.eql(await AdminService.run(SELECT.from(Authors)))
+    const _ = expect (await AdminService.read(Authors))
+    .to.eql(await AdminService.read('Authors'))
+    .to.eql(await AdminService.run(SELECT.from(Authors)))
     // temporary workaround
-    if (AdminService.read.fix_50)
-      expect(await AdminService.run(SELECT.from(Authors))).to.eql(
-        await AdminService.run(SELECT.from('Authors'))
-      )
+    if (cds.version >= '4.2.0')
+      _.to.eql(await AdminService.run(SELECT.from('Authors')))
   })
 
   it('allows reading from local services using cds.ql', async () => {
@@ -39,9 +35,8 @@ describe('Consuming Services locally', () => {
         })
     }).where(`name like`, 'E%')
     // temporary workaround
-    if (!AdminService.read.fix_50) {
+    if (cds.version < '4.2.0')
       query.SELECT.from.ref[0] = 'AdminService.Authors'
-    }
     const authors = await AdminService.run(query)
     expect(authors).to.containSubset([
       {
@@ -79,17 +74,14 @@ describe('Consuming Services locally', () => {
         })
     }
     const query1 = SELECT.from(Authors, projection).where(`name like`, 'E%')
-    expect(await cds.run(query1))
-      .to.eql(await db.run(query1))
-      .to.eql(await srv.run(query1))
-      .to.eql(await srv.read(Authors, projection).where(`name like`, 'E%'))
     const query2 = cds.read(Authors, projection).where(`name like`, 'E%')
-    // temporary workaround
-    if (srv.read.fix_50)
-      expect(await cds.run(query1))
-        .to.eql(await cds.run(query2))
-        .to.eql(await db.run(query2))
-        .to.eql(await srv.run(query2))
-        .to.eql(await db.read(Authors, projection).where(`name like`, 'E%')) // FIXME!!
+    expect(await cds.run(query1))
+    .to.eql(await db.run(query1))
+    .to.eql(await srv.run(query1))
+    .to.eql(await srv.read(Authors, projection).where(`name like`, 'E%'))
+    .to.eql(await cds.run(query2))
+    .to.eql(await db.run(query2))
+    .to.eql(await srv.run(query2))
+    .to.eql(await db.read(Authors, projection).where(`name like`, 'E%'))
   })
 })

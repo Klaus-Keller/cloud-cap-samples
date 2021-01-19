@@ -1,15 +1,9 @@
-const { expect } = require('./capire')
-const cds = require('@sap/cds')
+const { expect } = require('../test')
+const cds = require('@sap/cds/lib')
 const CQL = ([cql]) => cds.parse.cql(cql)
 const Foo = { name: 'Foo' }
 const Books = { name: 'capire.bookshop.Books' }
 
-const is_cds_333 = cds.version >= '3.33.3'
-if (!is_cds_333) {
-  // Monky-patching v3.33.3 features in older releases
-  const up = UPDATE('x').constructor.prototype
-  up.with = up.set
-}
 const { parse:cdr } = cds.ql
 
 // while jest has 'test' as alias to 'it', mocha doesn't
@@ -19,48 +13,37 @@ describe('cds.ql → cqn', () => {
   //
   let cqn
 
-  describe(`BUGS + GAPS...`, () => {
-    !(cdr ? it : it.skip)('should consistently handle *', () => {
+  describe.skip(`BUGS + GAPS...`, () => {
+
+    it('should consistently handle *', () => {
       expect({
         SELECT: { from: { ref: ['Foo'] }, columns: ['*'] },
       })
-        .to.eql(CQL`SELECT * from Foo`)
-        .to.eql(CQL`SELECT from Foo{*}`)
-        .to.eql(SELECT('*').from(Foo))
-        .to.eql(SELECT.from(Foo, ['*']))
+      .to.eql(CQL`SELECT * from Foo`)
+      .to.eql(CQL`SELECT from Foo{*}`)
+      .to.eql(SELECT('*').from(Foo))
+      .to.eql(SELECT.from(Foo,['*']))
     })
 
-    !(cdr ? it : it.skip)('should correctly handle { ... and:{...} }', () => {
-      expect(SELECT.from(Foo).where({ x: 1, and: { y: 2, or: { z: 3 } } })).to.eql({
-        SELECT: {
-          from: { ref: ['Foo'] },
-          where: [
-            { ref: ['x'] },
-            '=',
-            { val: 1 },
-            'and',
-            '(',
-            { ref: ['y'] },
-            '=',
-            { val: 2 },
-            'or',
-            { ref: ['z'] },
-            '=',
-            { val: 3 },
-            ')',
-          ],
-        },
-      })
+
+    it('should consistently handle lists', () => {
+      const ID = 11,  args = [`foo`, "'bar'", 3]
+      const cqn = CQL`SELECT from Foo where ID=11 and x in (foo,'bar',3)`
+      expect(SELECT.from(Foo).where(`ID=${ID} and x in (${args})`)).to.eql(cqn)
+      expect(SELECT.from(Foo).where(`ID=`, ID, `and x in`, args)).to.eql(cqn)
+      expect(SELECT.from(Foo).where({ ID, x:args })).to.eql(cqn)
     })
+
   })
+
 
   describe(`SELECT...`, () => {
     test('from ( Foo )', () => {
       expect({
         SELECT: { from: { ref: ['Foo'] } },
       })
-        .to.eql(CQL`SELECT from Foo`)
-        .to.eql(SELECT.from(Foo))
+      .to.eql(CQL`SELECT from Foo`)
+      .to.eql(SELECT.from(Foo))
     })
 
     test('from ( ..., <key>)', () => {
@@ -182,9 +165,8 @@ describe('cds.ql → cqn', () => {
             columns: [{ ref: ['a'] }, { ref: ['b'] }, cdr ? '*' : { ref: ['*'] }],
           },
         })
-    })
+      })
 
-    is_cds_333 &&
       test('from ( ..., => _.expand ( x=>{...}))', () => {
         // SELECT from Foo { *, x, bar.*, car{*}, boo { *, moo.zoo } }
         expect(
@@ -212,7 +194,6 @@ describe('cds.ql → cqn', () => {
         })
       })
 
-    is_cds_333 &&
       test('from ( ..., => _.inline ( _=>{...}))', () => {
         // SELECT from Foo { *, x, bar.*, car{*}, boo { *, moo.zoo } }
         expect(
@@ -261,7 +242,30 @@ describe('cds.ql → cqn', () => {
       // same for works distinct
     })
 
-    test.skip('where ( ... cql  |  {x:y} )', () => {
+    it('should correctly handle { ... and:{...} }', () => {
+      expect(SELECT.from(Foo).where({ x: 1, and: { y: 2, or: { z: 3 } } })).to.eql({
+        SELECT: {
+          from: { ref: ['Foo'] },
+          where: [
+            { ref: ['x'] },
+            '=',
+            { val: 1 },
+            'and',
+            '(',
+            { ref: ['y'] },
+            '=',
+            { val: 2 },
+            'or',
+            { ref: ['z'] },
+            '=',
+            { val: 3 },
+            ')',
+          ],
+        },
+      })
+    })
+
+    test('where ( ... cql  |  {x:y} )', () => {
       const args = [`foo`, "'bar'", 3]
       const ID = 11
 
@@ -298,7 +302,7 @@ describe('cds.ql → cqn', () => {
                 ')',
               ]
             : [
-                '(', //> this one is not required
+                // '(', //> this one is not required
                 { ref: ['ID'] },
                 '=',
                 { val: ID },
@@ -307,7 +311,7 @@ describe('cds.ql → cqn', () => {
                 'in',
                 { val: args },
                 'and',
-                // '(',  //> this one is missing, and that's changing the logic -> that's a BUG
+                '(',  //> this one is missing, and that's changing the logic -> that's a BUG
                 { ref: ['x'] },
                 'like',
                 { val: '%x%' },
@@ -321,7 +325,26 @@ describe('cds.ql → cqn', () => {
       })
 
       // using CQL fragments -> uses cds.parse.expr
-      expect((cqn = CQL`SELECT from Foo where ID=11 and x in ( foo, 'bar', 3)`)).to.eql({
+      const is_v2 = !!cds.parse.expr('(1,2)').list
+      if (is_v2) expect((cqn = CQL`SELECT from Foo where ID=11 and x in ( foo, 'bar', 3)`)).to.eql({
+        SELECT: {
+          from: { ref: ['Foo'] },
+          where: [
+            { ref: ['ID'] },
+            '=',
+            { val: ID },
+            'and',
+            { ref: ['x'] },
+            'in',
+            {list:[
+              { ref: ['foo'] },
+              { val: 'bar' },
+              { val: 3 },
+            ]}
+          ],
+        },
+      })
+      else expect((cqn = CQL`SELECT from Foo where ID=11 and x in ( foo, 'bar', 3)`)).to.eql({
         SELECT: {
           from: { ref: ['Foo'] },
           where: [
@@ -341,8 +364,6 @@ describe('cds.ql → cqn', () => {
           ],
         },
       })
-      expect(SELECT.from(Foo).where(`ID=`, ID, `and x in`, args)).to.eql(cqn)
-      expect(SELECT.from(Foo).where(`ID=${ID} and x in (${args})`)).to.eql(cqn)
 
       expect(
         SELECT.from(Foo).where(`x=`, 1, `or y.z is null and (a>`, 2, `or b=`, 3, `)`)
@@ -466,47 +487,38 @@ describe('cds.ql → cqn', () => {
     UPDATE.with allows to pass in plain data payloads, e.g. as obtained from REST clients.
     In addition, UPDATE.with supports specifying expressions, either in CQL fragements
     notation or as simple expression objects.
-  */
-    test('with', () => {
-      expect(UPDATE(Foo).with(`foo=`, 11, `bar-=`, 22))
+
+    UPDATE.data allows to pass in plain data payloads, e.g. as obtained from REST clients.
+    The passed in object can be modified subsequently, e.g. by adding or modifying values
+    before the query is finally executed.
+    */
+    test('with + data', () => {
+      if (cds.version < '4.1.0') return
+      const o = {}
+      const q = UPDATE(Foo).data(o).with(`bar-=`, 22)
+      o.foo = 11
+      expect(q)
+        .to.eql(UPDATE(Foo).with(`foo=`, 11, `bar-=`, 22))
         .to.eql(UPDATE(Foo).with({ foo: 11, bar: { '-=': 22 } }))
         .to.eql({
           UPDATE: {
             entity: 'Foo',
+            data: { foo: 11 },
             with: {
-              foo: { val: 11 },
               bar: { xpr: [{ ref: ['bar'] }, '-', { val: 22 }] },
             },
           },
         })
 
       // some more
-      // expect(UPDATE(Foo).with(`bar = coalesce(x,y), car = 'foo''s bar, car'`)).to.eql({
-      //   UPDATE: {
-      //     entity: 'Foo',
-      //     with: {
-      //       bar: { func: 'coalesce', args: [{ ref: ['x'] }, { ref: ['y'] }] },
-      //       car: { val: "foo's bar, car" },
-      //     },
-      //   },
-      // })
-    })
-
-    /*
-    UPDATE.data allows to pass in plain data payloads, e.g. as obtained from REST clients.
-    The passed in object can be modified subsequently, e.g. by adding or modifying values
-    before the query is finally executed.
-  */
-    test('data', () => {
-      const o = {}
-      const q = UPDATE(Foo).data(o).with(`bar-=`, 22)
-      o.foo = 11
-      expect(q).to.eql({
+      expect(UPDATE(Foo).with(`bar = coalesce(x,y), car = 'foo''s bar, car'`)).to.eql({
         UPDATE: {
           entity: 'Foo',
-          data: { foo: 11 },
+          data: {
+            car: "foo's bar, car",
+          },
           with: {
-            bar: { xpr: [{ ref: ['bar'] }, '-', { val: 22 }] },
+            bar: { func: 'coalesce', args: [{ ref: ['x'] }, { ref: ['y'] }] },
           },
         },
       })

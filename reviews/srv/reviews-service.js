@@ -10,23 +10,20 @@ module.exports = cds.service.impl (function(){
   })
 
   // Emit an event to inform subscribers about new avg ratings for reviewed subjects
-  // ( Note: req.on.succeeded ensures we only do that if there's no error )
-  this.after (['CREATE','UPDATE','DELETE'], 'Reviews', async(_,req) => {
+  this.after (['CREATE','UPDATE','DELETE'], 'Reviews', async function(_,req) {
     const {subject} = req.data
-    const {rating} = await cds.transaction(req) .run (
+    const {rating} = await cds.tx(req) .run (
       SELECT.one (['round(avg(rating),2) as rating']) .from (Reviews) .where ({subject})
     )
-    req.on ('succeeded', ()=>{
-      global.it || console.log ('< emitting:', 'reviewed', { subject, rating })
-      this.emit ('reviewed', { subject, rating })
-    })
+    global.it || console.log ('< emitting:', 'reviewed', { subject, rating })
+    await this.emit ('reviewed', { subject, rating })
   })
 
   // Increment counter for reviews considered helpful
   this.on ('like', (req) => {
     if (!req.user)  return req.reject(400, 'You must be identified to like a review')
     const {review} = req.data, {user} = req
-    const tx = cds.transaction(req)
+    const tx = cds.tx(req)
     return tx.run ([
       INSERT.into (Likes) .entries ({review_ID: review, user: user.id}),
       UPDATE (Reviews) .set({liked: {'+=': 1}}) .where({ID:review})
@@ -37,7 +34,7 @@ module.exports = cds.service.impl (function(){
   this.on ('unlike', async (req) => {
     if (!req.user)  return req.reject(400, 'You must be identified to remove a former like of yours')
     const {review} = req.data, {user} = req
-    const tx = cds.transaction(req)
+    const tx = cds.tx(req)
     const affectedRows = await tx.run (DELETE.from (Likes) .where ({review_ID: review,user: user.id}))
     if (affectedRows === 1)  return tx.run (UPDATE (Reviews) .set ({liked: {'-=': 1}}) .where ({ID:review}))
   })

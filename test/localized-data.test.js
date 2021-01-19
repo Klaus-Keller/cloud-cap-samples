@@ -1,5 +1,9 @@
+const { GET, expect } = require('../test') .run ('serve', 'test/localized-data.cds', '--in-memory')
+const cds = require('@sap/cds/lib')
+if (cds.User.default) cds.User.default = cds.User.Privileged // hard core monkey patch
+else cds.User = cds.User.Privileged // hard core monkey patch for older cds releases
+
 describe('Localized Data', () => {
-  const { GET, expect } = require('./capire').launch('cds serve',__dirname+'/localized-data.cds')
 
   it('serves localized $metadata documents', async () => {
     const { data } = await GET`/browse/$metadata?sap-language=de`
@@ -72,7 +76,7 @@ describe('Localized Data', () => {
     ])
   })
 
-  xit('supports @cds.localized:false', async ()=>{
+  it('supports @cds.localized:false', async ()=>{
     const { data } = await GET(`/browse/BooksSans?&$select=title,localized_title&$expand=currency&$filter=locale eq 'de' or locale eq null`, {
       headers: { 'Accept-Language': 'de' },
     })
