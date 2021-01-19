@@ -26,5 +26,12 @@
         "kind": "sql"
       }
     }
+  },
+  "sapux": [
+    "app/admin",
+    "app/browse"
+  ],
+  "devDependencies": {
+    "@sap/ux-specification": "^1.84.0"
   }
 }
